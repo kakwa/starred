@@ -46,15 +46,13 @@ def html_escape(text):
 @click.command()
 @click.option('--username', envvar='USER', required=True, help='GitHub username')
 @click.option('--token', envvar='GITHUB_TOKEN', required=True, help='GitHub token')
-@click.option('--sort',  is_flag=True, show_default=True, help='sort by category[language/topic] name alphabetically')
-@click.option('--topic', is_flag=True, show_default=True, help='category by topic, default is category by language')
-@click.option('--topic_limit', default=500, show_default=True, type=int, help='topic stargazer_count gt number, set bigger to reduce topics number')
+@click.option('--sort',  is_flag=True, show_default=True, help='sort by list name alphabetically')
 @click.option('--repository', default='', show_default=True, help='repository name')
 @click.option('--filename', default='README.md', show_default=True, help='file name')
 @click.option('--message', default='update awesome-stars, created by starred', show_default=True, help='commit message')
 @click.option('--private', is_flag=True, default=False, show_default=True, help='include private repos')
 @click.version_option(version=VERSION, prog_name='starred')
-def starred(username, token, sort, topic, repository, filename, message, private, topic_limit):
+def starred(username, token, sort, repository, filename, message, private):
     """GitHub starred
 
     creating your own Awesome List by GitHub stars!
@@ -65,7 +63,7 @@ def starred(username, token, sort, topic, repository, filename, message, private
 
     gh = GitHubGQL(token)
     try:
-        stars = gh.get_user_starred_by_username(username, topic_stargazer_count_limit=topic_limit)
+        lists = gh.get_user_starred_by_username(username)
     except Exception as e:
         click.secho(f'Error: {e}', fg='red')
         return
@@ -79,30 +77,26 @@ def starred(username, token, sort, topic, repository, filename, message, private
     click.echo(desc)
     repo_dict = {}
 
-    for s in stars:
-        # skip private repos if --private is not set
-        if s.is_private and not private:
-            continue
+    for list_obj in lists:
+        if list_obj.name not in repo_dict:
+            repo_dict[list_obj.name] = []
 
-        description = html_escape(s.description).replace('\n', '').strip()[:TEXT_LENGTH_LIMIT] if s.description else ''
+        for repo in list_obj.items:
+            # skip private repos if --private is not set
+            if repo.is_private and not private:
+                continue
 
-        if topic:
-            for category in s.topics or [DEFAULT_CATEGORY.lower()]:
-                if category not in repo_dict:
-                    repo_dict[category] = []
-                repo_dict[category].append([s.name, s.url, description])
-        else:
-            category = s.language or DEFAULT_CATEGORY
-
-            if category not in repo_dict:
-                repo_dict[category] = []
-            repo_dict[category].append([s.name, s.url, description])
+            description = html_escape(repo.description).replace('\n', '').strip()[
+                :TEXT_LENGTH_LIMIT] if repo.description else ''
+            repo_dict[list_obj.name].append([repo.name, repo.url, description])
 
     if sort:
-        repo_dict = OrderedDict(sorted(repo_dict.items(), key=lambda cate: cate[0]))
+        repo_dict = OrderedDict(
+            sorted(repo_dict.items(), key=lambda cate: cate[0]))
 
     for category in repo_dict.keys():
-        data = u'- [{}](#{})'.format(category, '-'.join(category.lower().split()))
+        data = u'- [{}](#{})'.format(category,
+                                     '-'.join(category.lower().split()))
         click.echo(data)
     click.echo('')
 
@@ -120,12 +114,15 @@ def starred(username, token, sort, topic, repository, filename, message, private
         try:
             rep = gh.repository(username, repository)
             try:
-                rep.file_contents(f'/{filename}').update(message, file.getvalue())
+                rep.file_contents(
+                    f'/{filename}').update(message, file.getvalue())
             except NotFoundError:
                 rep.create_file(filename, message, file.getvalue())
         except NotFoundError:
-            rep = gh.create_repository(repository, 'A curated list of my GitHub stars!')
-            rep.create_file(filename, 'starred initial commit', file.getvalue())
+            rep = gh.create_repository(
+                repository, 'A curated list of my GitHub stars!')
+            rep.create_file(filename, 'starred initial commit',
+                            file.getvalue())
         click.launch(rep.html_url)
 
 
