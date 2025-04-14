@@ -66,7 +66,7 @@ class GitHubGQL:
         headers = {"Authorization": f"Bearer {token}"}
         self.transport = AIOHTTPTransport(url=self.API_URL, headers=headers)
         self.client = Client(transport=self.transport,
-                             fetch_schema_from_transport=True)
+                             fetch_schema_from_transport=True, execute_timeout=60)
 
     def get_user_starred_by_username(self, username: str, after: str = '', topic_stargazer_count_limit: int = 0):
         items = []
